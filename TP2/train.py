@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter
 
 from dataset import CardioDataset
 
@@ -35,7 +36,7 @@ train_set, val_set, test_set = random_split(
     generator=generator
 )
 
-# Création des DataLoaders
+# DataLoaders
 train_loader = DataLoader(
     train_set,
     batch_size=64,
@@ -55,7 +56,7 @@ test_loader = DataLoader(
 )
 
 
-# Initialisation du device
+# Device
 device = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
 )
@@ -63,91 +64,108 @@ device = torch.device(
 print(f"Device utilisé : {device}")
 
 
-# Initialisation du modèle
-batch = next(iter(train_loader))
+def train_model(opt_name, learning_rate=0.001, epochs=30):
 
-model = MLP(
-    input_size=batch["features"].shape[1],
-    hidden_size=128
-).to(device)
+    # Création du modèle
+    model = MLP(
+        input_size=12,
+        hidden_size=128
+    ).to(device)
 
+    # Fonction de perte
+    criterion = nn.BCELoss()
 
-# Fonction de perte
-criterion = nn.BCELoss()
+    # Choix de l'optimiseur
+    if opt_name == "SGD":
 
-# Optimiseur
-optimizer = optim.SGD(
-    model.parameters(),
-    lr=0.01
-)
-
-
-# Coefficients de régularisation
-l1_lambda = 1e-4
-l2_lambda = 1e-3
-
-
-# Boucle d'entraînement
-for epoch in range(10):
-
-    model.train()
-
-    total_loss = 0.0
-    correct = 0
-    total = 0
-
-    for batch in train_loader:
-
-        inputs = batch["features"].to(device)
-        targets = batch["labels"].to(device)
-
-        # Remise à zéro des gradients
-        optimizer.zero_grad()
-
-        # Forward
-        outputs = model(inputs)
-
-        # Loss de base
-        base_loss = criterion(outputs, targets)
-
-        # Pénalité L1
-        l1_penalty = sum(
-            p.abs().sum()
-            for p in model.parameters()
+        optimizer = optim.SGD(
+            model.parameters(),
+            lr=learning_rate
         )
 
-        # Pénalité L2
-        l2_penalty = sum(
-            (p ** 2).sum()
-            for p in model.parameters()
+    elif opt_name == "Momentum":
+
+        optimizer = optim.SGD(
+            model.parameters(),
+            lr=learning_rate,
+            momentum=0.9
         )
 
-        # Loss totale
-        loss = (
-            base_loss
-            + l1_lambda * l1_penalty
-            + l2_lambda * l2_penalty
+    elif opt_name == "RMSprop":
+
+        optimizer = optim.RMSprop(
+            model.parameters(),
+            lr=learning_rate
         )
 
-        # Backpropagation
-        loss.backward()
+    elif opt_name == "Adam":
 
-        # Mise à jour des poids
-        optimizer.step()
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=learning_rate
+        )
 
-        # Statistiques
-        total_loss += loss.item()
+    else:
+        raise ValueError(f"Optimiseur inconnu : {opt_name}")
 
-        predictions = (outputs >= 0.5).float()
-
-        correct += (predictions == targets).sum().item()
-        total += targets.size(0)
-
-    average_loss = total_loss / len(train_loader)
-    accuracy = 100 * correct / total
-
-    print(
-        f"Epoch {epoch + 1}/10 "
-        f"- Loss: {average_loss:.4f} "
-        f"- Accuracy: {accuracy:.2f}%"
+    # TensorBoard
+    writer = SummaryWriter(
+        f"runs/cardio_{opt_name}_lr{learning_rate}"
     )
+
+    # Boucle d'entraînement
+    for epoch in range(epochs):
+
+        model.train()
+
+        running_loss = 0.0
+
+        for batch in train_loader:
+
+            inputs = batch["features"].to(device)
+            targets = batch["labels"].to(device)
+
+            # Remise à zéro des gradients
+            optimizer.zero_grad()
+
+            # Forward + loss
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+
+            # Backpropagation
+            loss.backward()
+
+            # Mise à jour des poids
+            optimizer.step()
+
+            running_loss += loss.item()
+
+        # Loss moyenne de l'époque
+        average_loss = running_loss / len(train_loader)
+
+        # Logging dans TensorBoard
+        writer.add_scalar(
+            "Training Loss",
+            average_loss,
+            epoch
+        )
+
+        print(
+            f"[{opt_name}] "
+            f"Epoch {epoch + 1}/{epochs} "
+            f"- Loss: {average_loss:.4f}"
+        )
+
+    writer.close()
+
+    return model
+
+
+# Lancement des expériences
+if __name__ == "__main__":
+
+    for opt in ["SGD", "Momentum", "RMSprop", "Adam"]:
+        train_model(
+            opt,
+            learning_rate=0.001
+        )
