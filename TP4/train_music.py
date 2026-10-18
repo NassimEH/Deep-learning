@@ -1,7 +1,3 @@
-"""
-CSC 8607 – TP4 : Réseaux récurrents et génération de séquences ABC
-"""
-
 import argparse
 import json
 import os
@@ -13,15 +9,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
-# Reproductibilité
 torch.manual_seed(42)
 random.seed(42)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 DATA_DIR = "/mnt/ssd/irishman"
-SEQ_LENGTH = 500  # Longueur fixe (~2x la longueur moyenne)
+SEQ_LENGTH = 500
 
 
 def load_data(file_path):
@@ -30,13 +24,11 @@ def load_data(file_path):
 
 
 def build_vocabulary(train_data, val_data):
-    # 1. Extraction déterministe (triée) des caractères uniques
     all_text = "".join(song["abc notation"] for song in train_data + val_data)
     unique_chars = sorted(list(set(all_text)))
     vocab_size = len(unique_chars)
     print(f"Taille du vocabulaire : {vocab_size} caractères uniques")
 
-    # 2. Mappings caractère <-> index
     char_to_index = {char: idx for idx, char in enumerate(unique_chars)}
     index_to_char = {idx: char for idx, char in enumerate(unique_chars)}
     return unique_chars, vocab_size, char_to_index, index_to_char
@@ -70,9 +62,7 @@ class MusicDataset(Dataset):
 
     def __getitem__(self, idx):
         seq = self.data[idx]
-        # Entrée : tous les caractères sauf le dernier
         x = torch.tensor(seq[:-1], dtype=torch.long)
-        # Cible : tous les caractères sauf le premier (décalage de +1)
         y = torch.tensor(seq[1:], dtype=torch.long)
         return x, y
 
@@ -93,10 +83,9 @@ class MusicModel(nn.Module):
         self.fc = nn.Linear(hidden_size, vocab_size)
 
     def forward(self, x, hidden_state=None):
-        # x : (batch_size, seq_len)
-        embeds = self.embedding(x)  # -> (batch_size, seq_len, embedding_dim)
-        out, hidden_state = self.rnn(embeds, hidden_state)  # -> (B, T, H)
-        logits = self.fc(out)  # -> (batch_size, seq_len, vocab_size)
+        embeds = self.embedding(x)
+        out, hidden_state = self.rnn(embeds, hidden_state)
+        logits = self.fc(out)
         return logits, hidden_state
 
 
@@ -112,8 +101,6 @@ def evaluate_model(model, val_loader, loss_fn, vocab_size):
     for x, y in val_loader:
         x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         logits, _ = model(x)
-
-        # Aplatissement (batch_size * seq_len, vocab_size) pour CrossEntropyLoss
         loss = loss_fn(logits.reshape(-1, vocab_size), y.reshape(-1))
 
         total_loss += loss.item() * y.numel()
@@ -173,9 +160,8 @@ def train_model(
         total_train_loss, total_train_tokens = 0.0, 0
         epoch_grad_norms = []
 
-        for x, y in tqdm(
-            train_loader, desc=f"[{run_name}] Epoch {epoch}/{num_epochs}", leave=False
-        ):
+        n_batches = len(train_loader)
+        for batch_idx, (x, y) in enumerate(train_loader, start=1):
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
 
@@ -183,13 +169,11 @@ def train_model(
             loss = loss_fn(logits.reshape(-1, vocab_size), y.reshape(-1))
             loss.backward()
 
-            # Calcul de la norme des gradients (et clipping éventuel AVANT optimizer.step())
             if max_grad_norm is not None:
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     model.parameters(), max_norm=max_grad_norm
                 )
             else:
-                # Calcul de la norme sans modifier les gradients (max_norm=inf)
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     model.parameters(), max_norm=float("inf")
                 )
@@ -203,6 +187,13 @@ def train_model(
             total_train_loss += loss.item() * y.numel()
             total_train_tokens += y.numel()
             global_step += 1
+
+            if batch_idx == 1 or batch_idx == n_batches or batch_idx % 50 == 0:
+                print(
+                    f"  [{run_name}] Epoch {epoch}/{num_epochs} "
+                    f"batch {batch_idx}/{n_batches} loss={loss.item():.4f}",
+                    flush=True,
+                )
 
         avg_train_loss = total_train_loss / total_train_tokens
         avg_grad_norm = sum(epoch_grad_norms) / len(epoch_grad_norms)
@@ -219,7 +210,6 @@ def train_model(
             f"Val Acc: {val_acc:.4f} | Avg GradNorm: {avg_grad_norm:.3f}"
         )
 
-        # Early Stopping
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
@@ -245,7 +235,6 @@ def train_model(
 
     writer.close()
 
-    # Recharge le meilleur checkpoint
     try:
         ckpt = torch.load(save_path, map_location=device, weights_only=False)
     except TypeError:
@@ -261,25 +250,17 @@ def generate_music(
     model.eval()
     generated_seq = start_sequence
 
-    # 1. Phase de pré-remplissage (lecture de l'amorce)
     input_indices = [char_to_index[c] for c in start_sequence]
     input_tensor = torch.tensor(input_indices, dtype=torch.long, device=device).unsqueeze(0)
-
-    # On récupère les logits et l'état caché à la fin de l'amorce
     logits, hidden_state = model(input_tensor, hidden_state=None)
 
-    # 2. Boucle de génération auto-régressive caractère par caractère
     for _ in range(output_length):
-        # Logits du dernier pas de temps divisés par la température
         last_logits = logits[:, -1, :] / temperature
         probs = F.softmax(last_logits, dim=-1).squeeze(0)
-
-        # Tirage aléatoire selon la distribution de probabilité
         next_index = torch.multinomial(probs, num_samples=1).item()
         next_char = index_to_char[next_index]
         generated_seq += next_char
 
-        # Le caractère généré devient la seule entrée (1, 1) du pas suivant
         input_tensor = torch.tensor([[next_index]], dtype=torch.long, device=device)
         logits, hidden_state = model(input_tensor, hidden_state=hidden_state)
 
@@ -342,20 +323,16 @@ def generate_temperature_examples(model, char_to_index, index_to_char, out_dir="
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="TP4 – Génération musicale ABC (RNN/LSTM)")
+    parser = argparse.ArgumentParser(description="TP4 - Génération musicale ABC (RNN/LSTM)")
     parser.add_argument(
         "--mode",
         type=str,
         default="full",
         choices=["stats", "count", "quick", "full", "generate"],
-        help=(
-            "stats: stats dataset | count: paramètres | "
-            "quick: 3 runs séance | full: LSTM long | generate: génération seule"
-        ),
     )
     parser.add_argument("--rnn_type", type=str, default="lstm", choices=["rnn", "lstm"])
     parser.add_argument("--subset_size", type=int, default=50000)
-    parser.add_argument("--use_full_data", action="store_true", help="Ignore subset_size (None)")
+    parser.add_argument("--use_full_data", action="store_true")
     parser.add_argument("--num_epochs", type=int, default=30)
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=5e-3)
@@ -386,7 +363,6 @@ if __name__ == "__main__":
     )
     vectorize_string = make_vectorize_fn(char_to_index)
 
-    # Sauvegarde du vocabulaire pour la génération ultérieure
     vocab_path = "vocab.json"
     with open(vocab_path, "w", encoding="utf-8") as f:
         json.dump({"chars": unique_chars}, f, ensure_ascii=False, indent=2)
@@ -400,7 +376,6 @@ if __name__ == "__main__":
     subset_size = None if args.use_full_data else args.subset_size
 
     if args.mode == "quick":
-        # Exercice 3 : 3 runs rapides sur 10 000 partitions
         configs = [
             {"rnn_type": "rnn", "max_grad_norm": None, "save_path": "best_rnn_noclip.pth"},
             {"rnn_type": "rnn", "max_grad_norm": 1.0, "save_path": "best_rnn_clip.pth"},
@@ -425,7 +400,6 @@ if __name__ == "__main__":
                 save_path=cfg["save_path"],
             )
 
-        # Génération illustrative avec le LSTM clip
         model = MusicModel(vocab_size, 256, 512, rnn_type="lstm").to(device)
         try:
             ckpt = torch.load("best_lstm_clip.pth", map_location=device, weights_only=False)
@@ -435,7 +409,6 @@ if __name__ == "__main__":
         generate_temperature_examples(model, char_to_index, index_to_char)
 
     elif args.mode == "full":
-        # Exercice 4 : entraînement long LSTM + génération T in {0.2, 0.8, 2.0}
         model = train_model(
             train_data,
             val_data,

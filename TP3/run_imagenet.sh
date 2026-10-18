@@ -15,7 +15,6 @@ set -eo pipefail
 cd /mnt/hdd/homes/nelhaddad/TP3
 mkdir -p logs checkpoints runs figures
 
-# nounset off around conda activate (MKL_INTERFACE_LAYER may be unset)
 set +u
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate deeplearning
@@ -25,5 +24,4 @@ export MKL_INTERFACE_LAYER="${MKL_INTERFACE_LAYER:-LP64}"
 echo "Début du job $SLURM_JOB_ID sur le nœud $SLURM_NODELIST"
 nvidia-smi
 
-# Entraînement long : AlexNet sur ImageNet complet, 50 époques (early stopping patience=5)
 python -u train_imagenet.py --model alexnet --num_epochs 50 --batch_size 256

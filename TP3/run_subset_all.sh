@@ -15,7 +15,6 @@ set -eo pipefail
 cd /mnt/hdd/homes/nelhaddad/TP3
 mkdir -p logs checkpoints runs figures
 
-# nounset off around conda activate (MKL_INTERFACE_LAYER may be unset)
 set +u
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate deeplearning

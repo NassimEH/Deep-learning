@@ -4,20 +4,25 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=02:00:00
+#SBATCH --account=csc_8607
+#SBATCH --qos=normal
 #SBATCH -J music-lstm
 #SBATCH -o logs/%x-%j.out
 #SBATCH -e logs/%x-%j.err
+#SBATCH --chdir=/mnt/hdd/homes/nelhaddad/TP4
 
 set -euo pipefail
-mkdir -p logs generated runs_rnn
+mkdir -p logs generated runs_rnn figures
 
+set +u
 source ~/miniforge3/etc/profile.d/conda.sh
 conda activate deeplearning
+set -u
 
 echo "Job $SLURM_JOB_ID sur $SLURM_NODELIST"
 nvidia-smi
+python -c "import torch; print('cuda:', torch.cuda.is_available(), torch.__version__)"
 
-# LSTM long : hidden_size=1024, subset 50k, clipping, 30 époques + génération T∈{0.2,0.8,2.0}
 python -u train_music.py \
   --mode full \
   --rnn_type lstm \

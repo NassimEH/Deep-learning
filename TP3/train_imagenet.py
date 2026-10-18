@@ -1,7 +1,3 @@
-"""
-CSC 8607 – TP3 : Réseaux convolutifs (ImageNet, MLP vs AlexNet)
-"""
-
 import argparse
 import os
 import time
@@ -20,7 +16,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
-# 1. Pipeline d'entraînement (avec Data Augmentation)
 train_transform = transforms.Compose(
     [
         transforms.RandomResizedCrop(227),
@@ -30,7 +25,6 @@ train_transform = transforms.Compose(
     ]
 )
 
-# 2. Pipeline de validation (déterministe)
 val_transform = transforms.Compose(
     [
         transforms.Resize(256),
@@ -46,7 +40,6 @@ def get_dataloaders(batch_size=256, n_workers=8, subset_size=None):
     train_dataset = ImageNet(root=data_dir, split="train", transform=train_transform)
     val_dataset = ImageNet(root=data_dir, split="val", transform=val_transform)
 
-    # Optionnel : sous-ensemble pour tester rapidement le code en séance
     if subset_size is not None:
         generator = torch.Generator().manual_seed(42)
         train_indices = torch.randperm(len(train_dataset), generator=generator)[:subset_size]
@@ -123,8 +116,6 @@ class AlexNet(nn.Module):
 
 
 class AlexNetDeep(nn.Module):
-    """AlexNet + 3 convolutions 256×3×3 (padding=1) + ReLU juste après Conv5."""
-
     def __init__(self, num_classes=1000):
         super().__init__()
         self.features = nn.Sequential(
@@ -140,7 +131,6 @@ class AlexNetDeep(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            # 3 couches supplémentaires après Conv5
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
@@ -172,10 +162,11 @@ def count_parameters(model):
 
 @torch.no_grad()
 def evaluate(loader, model, criterion):
-    model.eval()  # Désactive le Dropout !
+    model.eval()
     running_loss, correct, total = 0.0, 0, 0
     for images, labels in loader:
-        images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
         outputs = model(images)
         loss = criterion(outputs, labels)
         running_loss += loss.item() * images.size(0)
@@ -219,14 +210,13 @@ def train_model(
     epoch_durations = []
 
     for epoch in range(num_epochs):
-        model.train()  # Active le Dropout !
+        model.train()
         running_loss, correct_train, total_train = 0.0, 0, 0
         t0 = time.perf_counter()
 
         for images, labels in train_loader:
-            images, labels = images.to(device, non_blocking=True), labels.to(
-                device, non_blocking=True
-            )
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -259,7 +249,6 @@ def train_model(
             f"Time: {epoch_time:.1f}s"
         )
 
-        # --- EARLY STOPPING ---
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             early_stop_counter = 0
@@ -289,52 +278,28 @@ def train_model(
 
 
 def print_parameter_counts():
-    mlp = MLP()
-    alex = AlexNet()
-    alex_deep = AlexNetDeep()
-    print(f"MLP paramètres          : {count_parameters(mlp):,}")
-    print(f"AlexNet paramètres      : {count_parameters(alex):,}")
-    print(f"AlexNetDeep paramètres  : {count_parameters(alex_deep):,}")
+    print(f"MLP paramètres          : {count_parameters(MLP()):,}")
+    print(f"AlexNet paramètres      : {count_parameters(AlexNet()):,}")
+    print(f"AlexNetDeep paramètres  : {count_parameters(AlexNetDeep()):,}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="TP3 ImageNet – MLP vs AlexNet")
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="alexnet",
-        choices=["alexnet", "mlp", "alexnet_deep"],
-        help="Architecture à entraîner",
-    )
-    parser.add_argument(
-        "--subset_size",
-        type=int,
-        default=None,
-        help="Taille du sous-ensemble train (None = ImageNet complet)",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, default="alexnet", choices=["alexnet", "mlp", "alexnet_deep"])
+    parser.add_argument("--subset_size", type=int, default=None)
     parser.add_argument("--num_epochs", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-5)
     parser.add_argument("--patience", type=int, default=5)
-    parser.add_argument(
-        "--count_only",
-        action="store_true",
-        help="Affiche uniquement le nombre de paramètres puis quitte",
-    )
+    parser.add_argument("--count_only", action="store_true")
     args = parser.parse_args()
 
     print(f"Device : {device}")
     print_parameter_counts()
-
     if args.count_only:
         raise SystemExit(0)
 
-    # Exercice 4 : entraînement long AlexNet sur ImageNet complet (défaut sbatch)
-    # Mode rapide séance :
-    #   python -u train_imagenet.py --model mlp --subset_size 20000 --num_epochs 10
-    #   python -u train_imagenet.py --model alexnet --subset_size 20000 --num_epochs 10
-    #   python -u train_imagenet.py --model alexnet_deep --subset_size 20000 --num_epochs 10
     train_model(
         model_name=args.model,
         batch_size=args.batch_size,

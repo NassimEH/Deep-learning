@@ -1,304 +1,117 @@
-# CSC 8607 – TP4 : Réseaux récurrents et génération de séquences ABC
+# TP 4 - Réseaux récurrents
 
-**Auteur :** *(à compléter)*  
-**Données :** `/mnt/ssd/irishman` (`train.json`, `validation.json`)
+**CSC 8607** - Nassim EL HADDAD
 
----
+## 1. Exploration et prétraitement
 
-## Exercice 1 — Exploration et prétraitement
+Le corpus utilisé est constitué de partitions musicales au format ABC. Il contient **214 122 partitions d'entraînement** et **2 162 partitions de validation**. Le vocabulaire, construit au niveau caractère, comporte **95 symboles différents**. Les partitions d'entraînement ont une longueur moyenne de **290,1 caractères**, avec un maximum de **2 968 caractères**.
 
-### Statistiques du dataset (à remplir après exécution sur le cluster)
+Les premières lignes d'une partition correspondent à ses métadonnées. Par exemple, `X:` permet d'identifier la partition, `L:` définit la durée de référence des notes, `M:` indique la métrique et `K:` la tonalité. Les notes et les barres de mesure apparaissent ensuite dans le contenu musical.
 
-```bash
-python -u train_music.py --mode stats
-```
+**Pourquoi trier le vocabulaire ?**
 
-| Grandeur | Valeur |
-|----------|--------|
-| # partitions **train** | *(ex. ~200 000 — à reporter depuis le log)* |
-| # partitions **validation** | *(à reporter)* |
-| **vocab_size** (caractères uniques) | *(typiquement ~90–100 ; l'énoncé utilise 95)* |
-| Longueur **moyenne** (train) | *(≈ 250 caractères)* |
-| Longueur **max** (train) | *(à reporter)* |
+Le vocabulaire est construit à partir d'un ensemble de caractères. Or, un `set` Python ne garantit pas un ordre identique entre deux exécutions. Sans tri explicite avec `sorted(...)`, l'association entre chaque caractère et son indice pourrait donc changer.
 
-### Première partition et métadonnées ABC
+Cette association est utilisée pendant l'entraînement pour convertir les caractères en indices, mais elle doit également rester identique lors du chargement du modèle et de la génération. Sinon, un même indice pourrait correspondre à un caractère différent et rendre les prédictions incohérentes.
 
-Coller ici `train_data[0]["abc notation"]` puis l'écouter sur [ABC Player](https://abcjs.net/abcjs-editor.html).
+**Pourquoi tronquer les partitions à 500 caractères ?**
 
-Rôle des **en-têtes** (lignes avant les notes) :
+La longueur moyenne des partitions est d'environ 290 caractères. Une longueur maximale de 500 permet donc de conserver une grande partie de l'information utile tout en évitant de travailler systématiquement avec la longueur maximale de 2 968 caractères.
 
-| Champ | Rôle |
-|-------|------|
-| `X:` | numéro / identifiant de la partition |
-| `T:` | titre |
-| `M:` | métrique (ex. `6/8`, `4/4`) — découpage rythmique des mesures |
-| `L:` | durée de note par défaut (ex. `1/8`) |
-| `K:` | tonalité / armure (ex. `G`, `Dmaj`) |
-| `R:` / autres | éventuellement type de danse, tempo, etc. |
+Utiliser directement cette longueur maximale augmenterait fort le coût de la BPTT et la mémoire GPU. Les partitions courtes devraient aussi être remplies de beaucoup de padding, ce qui pèserait trop dans le calcul de la loss.
 
-Les notes (`A`–`G`, `a`–`g`), altérations et barres (`|`, `:|`, `||`) viennent **après** ces métadonnées.
+## 2. Dataset auto-régressif et modèles
 
-### Pourquoi `sorted(...)` sur le vocabulaire ?
+Avec `SEQ_LENGTH=500`, chaque partition est soit tronquée, soit complétée par du padding afin d'obtenir une longueur fixe de 500 caractères. Le principe du dataset auto-régressif consiste ensuite à décaler la séquence d'un caractère : `x` contient les 499 premiers caractères et `y` les 499 caractères suivants.
 
-`set(...)` en Python a un ordre d'itération **non déterministe** (hash aléatoire selon les runs / versions). `sorted(...)` fixe un ordre lexicographique **reproductible**.
+Avec un batch de 128 partitions, les tenseurs transmis au modèle ont donc une forme $(128,499)$. Les données sont stockées en `torch.long`, car elles représentent des indices de caractères. Ce type est requis par `nn.Embedding` et `CrossEntropyLoss`.
 
-Sans `sorted` : si vous sauvegardez les poids aujourd'hui puis reconstruisez `char_to_index` demain, l'indice du caractère `'A'` peut changer → les embeddings et la couche de sortie ne correspondent plus aux bons symboles → génération **incompréhensible** (mauvais mapping index ↔ caractère).
+**Nombre de paramètres**
 
-### Pourquoi `SEQ_LENGTH = 500` plutôt que `max_len` ?
+Pour $V=95$, $E=256$ et $H=512$, l'embedding contient $V\times E=24\,320$ paramètres. Le bloc RNN contient $394\,240$ paramètres et la couche linéaire finale $48\,735$ paramètres, soit un total de **467 295 paramètres** pour le modèle RNN.
 
-- La moyenne est ~250 ; 500 couvre la grande majorité des partitions utiles (~2× la moyenne) sans trop de padding.
-- Aligner sur `max_len` (souvent très grand, outliers) :
-  - **temps** : BPTT sur des séquences beaucoup plus longues (coût ∝ longueur) ;
-  - **mémoire GPU** : activations stockées sur toute la longueur × batch ;
-  - **apprentissage** : énormément de tokens de padding (`' '`) → le modèle apprend surtout à prédire des espaces, gradients dilués sur le contenu musical réel.
+Pour le LSTM, le bloc récurrent contient quatre fois plus de paramètres, soit $1\,576\,960$. Le LSTM utilise quatre portes, chacune avec ses matrices et ses biais. Au total, le modèle LSTM compte **1 650 015 paramètres**.
 
----
+| Architecture | Embedding | Bloc récurrent | FC / Total |
+|--------------|-----------|----------------|------------|
+| RNN | 24 320 | 394 240 | 48 735 / **467 295** |
+| LSTM | 24 320 | 1 576 960 | 48 735 / **1 650 015** |
 
-## Exercice 2 — Dataset auto-régressif et modèles
+Une couche `nn.Embedding` convient bien ici. Les indices des caractères sont des catégories, sans relation numérique entre eux. Les passer tels quels à une couche linéaire donnerait une fausse idée de distance entre symboles. L'embedding associe chaque symbole à un vecteur appris de façon indépendante.
 
-### Shapes du DataLoader
+Une autre différence importante entre les deux architectures concerne leur état interne. Le RNN renvoie un état caché $h_t$, tandis que le LSTM conserve deux états, $(h_t,c_t)$. Le *cell state* $c_t$ constitue une mémoire à plus long terme, contrôlée par les différentes portes du LSTM.
 
-Avec `SEQ_LENGTH = 500` et `BATCH_SIZE = 128` :
+## 3. Entraînement et comparaison RNN / LSTM
 
-- chaque séquence paddée a longueur 500 ;
-- `x = seq[:-1]` et `y = seq[1:]` → longueur **499** ;
-- donc **`x.shape = y.shape = (128, 499)`**.
+Avant de calculer la `CrossEntropyLoss`, les dimensions des tenseurs doivent être adaptées. Les logits passent de $(B,T,V)$ à $(B\times T,V)$ et les cibles de $(B,T)$ à $(B\times T)$. Avec $B=128$ et $T=499$, cela représente donc $128\times499=63\,872$ prédictions de caractères.
 
-**Pourquoi `torch.long` ?**  
-`nn.Embedding` et `CrossEntropyLoss` attendent des **indices entiers** de classe / de token, pas des flottants. `float32` serait invalide (et sémantiquement absurde pour un index discret).
+Le clipping des gradients se fait après `backward()` et avant `optimizer.step()` : les gradients n'existent qu'après la rétropropagation, et il faut borner leur norme avant la mise à jour.
 
-### Calcul théorique des paramètres (`V=95`, `E=256`, `H=512`)
+Les résultats obtenus sur le subset de 10 000 partitions montrent une nette différence entre les modèles. Le LSTM obtient les meilleures performances, avec une **Val Loss de 0,56** et une **accuracy de 81,9 %**, contre 77,3 % pour le RNN sans clipping et 75,9 % pour le RNN avec clipping.
 
-#### Embedding
-\[
-V \times E = 95 \times 256 = 24\,320
-\]
+| Modèle | Val Loss | Val Acc | GradNorm moy. |
+|--------|----------|---------|---------------|
+| RNN sans clip | 0,72 | 77,3 % | 0,22 |
+| RNN clip=1 | 0,76 | 75,9 % | 0,27 |
+| **LSTM clip=1** | **0,56** | **81,9 %** | 0,08 |
 
-#### Bloc RNN (Elman) — matrices `ih`, `hh` + **2 biais**
-\[
-\begin{align*}
-W_{ih} &: H \times E = 512 \times 256 = 131\,072 \\
-W_{hh} &: H \times H = 512 \times 512 = 262\,144 \\
-b_{ih} + b_{hh} &: 2H = 1\,024 \\
-\textbf{Total RNN} &= 394\,240
-\end{align*}
-\]
+![Comparaison 3 runs](figures/tb_quick_3runs.png)
 
-#### Bloc LSTM — **4 portes** (i, f, g, o) ⇒ ×4
-\[
-\begin{align*}
-W_{ih} &: 4HE = 524\,288 \\
-W_{hh} &: 4H^2 = 1\,048\,576 \\
-b_{ih}+b_{hh} &: 8H = 4\,096 \\
-\textbf{Total LSTM} &= 1\,576\,960 = 4 \times 394\,240
-\end{align*}
-\]
+![GradNorm step](figures/tb_gradnorm_step.png)
 
-Le LSTM a **exactement 4×** plus de paramètres dans le bloc récurrent car chaque porte a sa propre copie des matrices $W_{ih}$, $W_{hh}$ et des deux biais.
+Le clipping est surtout utile pour le RNN. Autour de la sixième époque, la norme des gradients grimpe à plusieurs millions. C'est une **explosion des gradients**, classique quand on rétropropage sur de longues séquences.
 
-#### Couche linéaire `fc`
-\[
-H \times V + V = 512 \times 95 + 95 = 48\,735
-\]
+La fonction `clip_grad_norm_` mesure d'abord la norme, puis la borne à la valeur choisie. Ça évite des mises à jour instables. En revanche, le clipping ne règle pas le problème inverse : la disparition des gradients.
 
-| Architecture | Embedding | RNN/LSTM | FC | **Total** |
-|--------------|-----------|----------|-----|-----------|
-| `rnn` | 24 320 | 394 240 | 48 735 | **467 295** |
-| `lstm` | 24 320 | 1 576 960 | 48 735 | **1 650 015** |
+Le LSTM s'en sort mieux grâce à sa mémoire. Son *cell state* suit la relation
 
-Vérification : `python -u train_music.py --mode count` (ou `count_parameters`).
+$$c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t$$
 
-### Pourquoi `nn.Embedding` plutôt qu'un scalaire → Linear ?
+Cette mise à jour additive laisse le gradient circuler plus facilement sur de longues séquences. Quand la *forget gate* reste proche de 1, des informations peuvent être gardées sur beaucoup de pas. En musique, ça aide à retenir le rythme ou des motifs apparus plus tôt dans la partition.
 
-Un indice $i \in \{0,\ldots,V-1\}$ traité comme un **réel** encoderait une fausse métrique (ex. `'B'=2` « plus proche » de `'A'=1` que de `'Z'`).  
-`nn.Embedding` est une **table de vecteurs** (équivalent one-hot × matrice) : chaque caractère a un embedding indépendant, sans ordre artificiel sur les indices.
+L'accuracy reste à prendre avec précaution. Les partitions courtes sont remplies jusqu'à 500 caractères : beaucoup de padding, facile à prédire, ce qui gonfle un peu la métrique. On pourrait utiliser `CrossEntropyLoss(ignore_index=...)` pour ignorer ce padding dans la loss.
 
-### `hidden_state` : RNN vs LSTM
+## 4. Génération et entraînement long
 
-- **`nn.RNN`** : retourne un seul tenseur $h_t$ (état caché), shape `(num_layers, batch, H)` (ici 1 couche).
-- **`nn.LSTM`** : retourne un **tuple** `(h_t, c_t)` :
-  - $h_t$ : état caché (sortie exposée / lue par la couche suivante) ;
-  - $c_t$ : **cell state** (mémoire longue durée, mise à jour additive via portes).
+### Complexité et température
 
-Rôle : $c_t$ stocke l'information sur le long terme ; les portes contrôlent écriture/oubli/lecture, ce qui atténue le vanishing gradient par rapport au RNN simple.
+Lors de la génération, le modèle peut réutiliser son état caché et ne traiter qu'un seul nouveau caractère à chaque étape. Pour générer $N$ caractères, chaque étape étant effectuée une seule fois, la complexité est alors en $O(N)$.
 
----
+Sans réutiliser l'état caché, il faudrait à chaque étape repasser l'ensemble de la séquence déjà générée dans le modèle. Le nombre de calculs augmenterait alors avec la longueur de la séquence, ce qui conduirait à une complexité en $O(N^2)$.
 
-## Exercice 3 — Entraînement, gradients, RNN vs LSTM
+La température $T$ permet de contrôler le niveau d'aléatoire lors du choix du prochain caractère. Avec une température très faible, comme $T=0.2$, la distribution se concentre fortement sur les caractères les plus probables. La génération devient alors plus prévisible, mais également plus répétitive.
 
-### Commandes (mode rapide séance)
+À l'inverse, une température élevée augmente la diversité des sorties. Lorsque $T$ devient très grande, la distribution se rapproche d'une distribution uniforme et les caractères moins probables sont davantage sélectionnés. La génération devient alors plus imprévisible et peut perdre en cohérence.
 
-```bash
-python -u train_music.py --mode quick
-# équivalent aux 3 runs : RNN noclip, RNN clip=1.0, LSTM clip=1.0
-# (15 époques, subset_size=10000, hidden=512)
-tensorboard --logdir runs_rnn
-```
+### Exemples générés
 
-### Pourquoi `logits.reshape(-1, vocab_size)` et `y.reshape(-1)` ?
+Les exemples générés avec l'amorce *Irish Reel* montrent bien l'effet de la température. À $T=0.2$, la syntaxe ABC reste globalement correcte, mais la sortie est très répétitive : le modèle choisit presque toujours les caractères les plus probables.
 
-`CrossEntropyLoss` attend :
+Avec $T=0.8$, le résultat constitue un meilleur compromis entre diversité et cohérence. Les rythmes et les enchaînements de notes sont plus variés tout en conservant une structure musicale et syntaxique relativement lisible.
 
-- prédictions `(N, C)` — ici $C=$ `vocab_size` ;
-- cibles `(N,)` — indices de classe.
+Enfin, avec $T=2.0$, la diversité augmente fortement, mais la qualité de la génération se dégrade. On observe davantage de caractères rares, des en-têtes parfois incorrects et des mesures moins régulières. Une température trop élevée favorise donc la diversité au détriment de la validité de la partition.
 
-Or `logits` est `(B, T, V)` et `y` est `(B, T)`. Le `-1` fusionne batch et temps :  
-$N = B \times T = 128 \times 499 = 63\,872$ tokens traités comme exemples indépendants pour la loss.
+### Entraînement long avec Slurm
 
-### Ordre : `backward` → `clip_grad_norm_` → `step`
+Un entraînement plus important a ensuite été réalisé avec un LSTM de taille cachée $H=1024$, entraîné sur 50 000 partitions pendant jusqu'à 30 époques, avec un clipping des gradients à 1.
 
-1. `loss.backward()` **calcule et stocke** les `.grad` ;
-2. `clip_grad_norm_` **modifie** ces `.grad` (rescale si $\|g\|_2 > max\_norm$) ;
-3. `optimizer.step()` **applique** les gradients (éventuellement déjà clipés).
+Les résultats montrent une amélioration rapide dès les premières époques. À la sixième époque, la validation atteint une accuracy de **83,9 %** avec une Val Loss de **0,50**. Les performances sont déjà supérieures à celles obtenues avec le modèle entraîné sur le subset de 10 000 partitions.
 
-Si on clipait après `step()`, la mise à jour aurait déjà eu lieu avec des gradients explosifs. Si on clipait avant `backward()`, il n'y aurait pas encore de gradients.
+| Ép. | Train Loss | Val Loss | Val Acc |
+|-----|------------|----------|---------|
+| 1 | 0,76 | 0,57 | 81,3 % |
+| 2 | 0,55 | 0,53 | 82,6 % |
+| 3 | 0,51 | 0,51 | 83,2 % |
+| 4 | 0,50 | 0,50 | 83,6 % |
+| 5 | 0,48 | 0,49 | 83,8 % |
+| 6 | 0,48 | 0,50 | 83,9 % |
 
-### Analyse expérimentale (TensorBoard)
+![LSTM long](figures/tb_lstm_full.png)
 
-> Insérer les captures :
->
-> `![Loss/Val](figures/tb_loss_val_3runs.png)`  
-> `![Acc/Val](figures/tb_acc_val_3runs.png)`  
-> `![GradNorm](figures/tb_gradnorm_3runs.png)`
+L'utilisation d'un corpus plus important permet donc au modèle de disposer de davantage d'exemples et d'apprendre des représentations plus générales de la structure musicale. Ces résultats confirment l'intérêt d'augmenter la quantité de données disponibles pour ce type de tâche.
 
-**Run 1 (RNN, no clip) vs Run 2 (RNN, clip=1.0) :**  
-Sans clipping, la `GradNorm` peut **exploser** par moments (produit de 500 jacobiennes en BPTT) → spikes de loss, instabilité. Le clipping borne $\|g\|_2$ et corrige principalement le problème d'**exploding gradient** du RNN simple (il ne résout pas à lui seul le *vanishing*).
+### Bonus : transposition
 
-**Run 2 (RNN+clip) vs Run 3 (LSTM+clip) :**  
-Le LSTM converge en général **plus vite** et atteint une meilleure Val Loss / Accuracy.  
-Mathématiquement, la cellule :
-\[
-c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t
-\]
-est une **voie additive** contrôlée par la forget gate $f_t$. Si $f_t \approx 1$, le gradient $\partial c_t / \partial c_{t-1}$ reste proche de 1 sur de nombreux pas → les dépendances longues (structure de mesures, motifs répétés dans une jig/reel) sont mieux préservées que dans le RNN Elman $h_t = \tanh(W_h h_{t-1} + \cdots)$ où le facteur $|\lambda(W_h)|^{T}$ s'atténue ou explose.
+Une piste simple pour augmenter artificiellement la diversité du corpus serait de transposer les mélodies d'un certain nombre de demi-tons. Les notes ABC seraient alors décalées et la tonalité indiquée dans l'en-tête `K:` serait adaptée en conséquence.
 
-### Accuracy artificiellement optimiste à cause du padding
-
-Une partition de 250 caractères paddée à 500 contient ~250 espaces. Prédire `' '` après le début du padding est **trivial** → l'accuracy globale est gonflée.
-
-**Correction simple :**  
-`nn.CrossEntropyLoss(ignore_index=char_to_index[' '])`  
-(ou un index de padding dédié) pour **exclure** les positions de padding de la loss (et idéalement de l'accuracy).
-
----
-
-## Exercice 4 — Génération, température, Slurm
-
-### Complexité algorithmique
-
-- **Sans réutiliser `hidden_state`** : à l'étape $k$, on repasse la séquence de longueur $\approx L_0 + k$ → coût total  
-  $\sum_{k=1}^{N} O(L_0 + k) = O(N^2)$ (quadratique en $N$ caractères générés).
-- **Avec propagation de `hidden_state`** : chaque pas coûte $O(1)$ (un seul token) → **$O(N)$** au total.
-
-### Rôle de la température $T$
-
-\[
-P(y_t = c) = \frac{\exp(z_{t,c}/T)}{\sum_{c'}\exp(z_{t,c'}/T)}
-\]
-
-- **$T \to 0^+$** : la distribution se concentre sur $\arg\max_c z_{t,c}$ → équivalent au **greedy decoding** (déterministe, peu diversifié, risque de boucles).
-- **$T \to +\infty$** : $z/T \to 0$ → distribution **uniforme** sur le vocabulaire → génération chaotique, syntaxe ABC souvent invalide.
-
-### Générations à $T \in \{0.2, 0.8, 2.0\}$
-
-Amorce :
-```text
-X:1
-T:Irish Reel
-M:4/4
-L:1/8
-K:D
-```
-
-Après le job long, coller ici le contenu de `generated/irish_reel_T*.abc` (aussi dans les logs Slurm) :
-
-### T = 0.2 (attendu : cohérent, répétitif)
-
-```abc
-(à coller depuis generated/irish_reel_T0.2.abc)
-```
-
-Commentaire typique : syntaxe souvent correcte, motifs qui se répètent, peu de surprise.
-
-### T = 0.8 (attendu : bon compromis)
-
-```abc
-(à coller depuis generated/irish_reel_T0.8.abc)
-```
-
-Commentaire typique : barres `|` et notes plus variées, encore globalement « musicale ».
-
-### T = 2.0 (attendu : divers / chaotique)
-
-```abc
-(à coller depuis generated/irish_reel_T2.0.abc)
-```
-
-Commentaire typique : caractères rares, en-têtes cassés, mesures irrégulières — richesse au détriment de la validité.
-
-### Job Slurm
-
-```bash
-cd TP4
-sbatch run_music.sh
-squeue -u $USER
-tail -f logs/music-lstm-XXXX.out
-```
-
-Hyperparamètres du script : LSTM, `hidden_size=1024`, `subset_size=50000`, `max_grad_norm=1.0`, `num_epochs=30`, puis génération automatique des 3 températures.
-
-### Bonus — augmentation par transposition
-
-En ABC, on peut :
-
-1. parser l'en-tête `K:` et les notes (`A`–`G` / `a`–`g`, `#`, `b`) ;
-2. appliquer un décalage de $k$ demi-tons (table chromatique) ;
-3. réécrire `K:` (ex. `G` → `A`) et les notes transposées.
-
-Chaque partition engendre plusieurs variantes **structurellement identiques** mais avec d'autres caractères → élargit le support empirique, réduit le sur-apprentissage sur des tonalités / doigtés spécifiques du corpus irlandais.
-
----
-
-## Fichiers rendus
-
-```
-TP4/
-├── train_music.py      # chargement, vocab, dataset, RNN/LSTM, train, generate
-├── run_music.sh        # job Slurm LSTM long + génération
-├── rapport.md
-├── vocab.json          # généré à l'exécution
-├── best_lstm.pth       # meilleur checkpoint (après train)
-├── generated/          # irish_reel_T0.2/0.8/2.0.abc
-├── runs_rnn/           # TensorBoard
-├── figures/            # captures
-└── logs/               # sorties sbatch
-```
-
-### Commandes rappel
-
-```bash
-# Stats dataset + vocab
-python -u train_music.py --mode stats
-
-# Comptage paramètres (sans données cluster si V=95 forcé en count)
-python -u train_music.py --mode count
-
-# 3 runs séance
-python -u train_music.py --mode quick
-
-# Job long
-sbatch run_music.sh
-
-# Génération seule depuis un checkpoint
-python -u train_music.py --mode generate --checkpoint best_lstm.pth
-```
-
-### Checklist Git
-
-- [x] `train_music.py`
-- [x] `run_music.sh`
-- [x] `rapport.md` (réponses théoriques)
-- [ ] Captures TensorBoard des 3 runs
-- [ ] Stats exactes train/val/vocab depuis le cluster
-- [ ] 3 fichiers ABC générés + commentaires d'écoute
-- [ ] `git add TP4 && git commit && git push`
+On garderait la structure rythmique et mélodique, tout en montrant la même idée musicale dans plusieurs tonalités. Le modèle dépendrait moins des tonalités dominantes du corpus, ce qui limiterait le sur-apprentissage.

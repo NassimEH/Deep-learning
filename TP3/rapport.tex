@@ -59,9 +59,8 @@ Les pipelines de prétraitement utilisées sont les suivantes :
 \textbf{Pourquoi utiliser \texttt{Normalize}~?}
 
 Après \texttt{ToTensor}, les valeurs des pixels sont comprises entre 0 et 1.
-La normalisation permet de recentrer et de remettre ces valeurs à une échelle
-adaptée à l'apprentissage du réseau. Elle facilite ainsi la convergence et rend
-l'entraînement plus stable.
+La normalisation recentre ces valeurs et les ramène à une échelle adaptée
+à l'apprentissage. L'entraînement converge en général plus facilement.
 
 Les valeurs de moyenne et d'écart-type doivent être calculées uniquement à partir
 du jeu d'entraînement. Utiliser également les données de validation pour les
@@ -80,11 +79,10 @@ suivi d'un crop centré, sans augmentation aléatoire.
 \textbf{Dans quels cas le retournement horizontal peut-il être problématique~?}
 
 Le retournement horizontal n'est pas toujours pertinent. Il peut modifier le sens
-ou la signification de l'image lorsque la position gauche/droite constitue une
-information importante pour la classification. C'est notamment le cas pour certains
-chiffres ou caractères, comme 6 et 9 ou b et d, mais également pour des panneaux
-de signalisation ou des situations où la distinction entre une main gauche et une
-main droite est importante.
+ou la signification de l'image lorsque la position gauche/droite compte pour la
+classification. C'est le cas pour certains chiffres ou caractères (6 et 9, b et d),
+pour des panneaux de signalisation, ou quand il faut distinguer une main gauche
+d'une main droite.
 
 \section{MLP vs AlexNet}
 
@@ -111,18 +109,16 @@ La première couche concentre donc l'immense majorité des paramètres du résea
 À elle seule, elle contient environ 39,6 millions de paramètres, soit près de
 99\,\% des paramètres du MLP.
 
-Le principal défaut du MLP n'est cependant pas uniquement le nombre de paramètres.
-En aplatissant l'image, on perd complètement sa structure spatiale : deux pixels
-voisins dans l'image ne sont plus traités comme des éléments voisins par le réseau.
-Le MLP ne bénéficie donc ni du partage de poids, ni du biais inductif apporté par
-les convolutions, ce qui le rend particulièrement peu adapté au traitement d'images.
+Le principal défaut du MLP n'est pas seulement le nombre de paramètres.
+En aplatissant l'image, on perd sa structure spatiale : deux pixels voisins
+ne sont plus traités comme voisins par le réseau. Sans partage de poids ni
+biais inductif des convolutions, le MLP est peu adapté aux images.
 
-AlexNet conserve au contraire la structure spatiale des images grâce aux couches
-convolutives. Les mêmes filtres sont appliqués à différentes positions de l'image,
-ce qui permet notamment de détecter des motifs indépendamment de leur position
-exacte. Cela explique pourquoi une architecture convolutionnelle peut être beaucoup
-plus adaptée à la classification d'images, même avec un nombre de paramètres du
-même ordre de grandeur.
+AlexNet conserve la structure spatiale grâce aux couches convolutives.
+Les mêmes filtres s'appliquent à différentes positions, ce qui permet de
+détecter des motifs où qu'ils se trouvent. Une architecture convolutionnelle
+reste donc bien plus adaptée à la classification d'images, même avec un
+nombre de paramètres comparable.
 
 \begin{table}[H]
 \centering
@@ -160,14 +156,12 @@ pendant la rétropropagation.
 
 \section{Entraînement et comparaison (subset 20k)}
 
-Lors de l'entraînement, \texttt{train()} active notamment le comportement du Dropout.
-À l'inverse, \texttt{eval()} désactive le Dropout et place les autres couches
-concernées dans leur mode d'évaluation.
+Pendant l'entraînement, \texttt{train()} active le Dropout.
+\texttt{eval()} le désactive et place les autres couches en mode évaluation.
 
-Il est donc important d'utiliser \texttt{eval()} pendant la validation. Dans le cas
-contraire, le Dropout continuerait à supprimer aléatoirement certaines activations,
-ce qui rendrait les mesures de validation moins stables et moins représentatives
-des performances réelles du modèle.
+Il faut donc appeler \texttt{eval()} pendant la validation. Sinon le Dropout
+continuerait à couper des activations au hasard, et les mesures seraient moins
+stables et moins représentatives des vraies performances.
 
 Avec 1000 classes et une initialisation aléatoire, on s'attend initialement à une
 accuracy proche de $1/1000$, soit environ $0{,}001$. De même, la cross-entropy
@@ -236,20 +230,17 @@ Une époque dure environ \textbf{25 minutes}, ce qui représente environ
 \end{tabular}
 \end{table}
 
-Les performances progressent rapidement au cours des premières époques. À l'époque~8,
-l'accuracy de validation atteint environ 36,5\,\%, contre seulement 0,1\,\% attendus
-pour des prédictions aléatoires sur 1000 classes. Le réseau a donc clairement appris
-des représentations pertinentes pour la classification des images.
+Les performances progressent vite au début. À l'époque~8, l'accuracy de validation
+atteint environ 36,5\,\%, contre 0,1\,\% pour un tirage aléatoire sur 1000 classes.
+Le réseau a donc appris des représentations utiles pour classer les images.
 
-Les performances obtenues sur ImageNet complet sont également nettement meilleures
-que celles observées sur le subset de 20\,000 images. L'utilisation d'un jeu de
-données beaucoup plus important fournit davantage d'exemples au modèle et lui permet
-de mieux généraliser. Les augmentations de données utilisées pendant l'entraînement
-contribuent également à limiter la mémorisation des exemples d'entraînement.
+Les résultats sur ImageNet complet sont aussi bien meilleurs que sur le subset
+de 20\,000 images. Un jeu de données plus grand donne plus d'exemples au modèle
+et aide à généraliser. Les augmentations limitent aussi la mémorisation des
+exemples d'entraînement.
 
-À l'époque~8, l'écart entre les performances d'entraînement et de validation reste
-raisonnable. On n'observe donc pas, à ce stade, de signe particulièrement marqué
-de surapprentissage.
+À l'époque~8, l'écart train/validation reste raisonnable. Rien n'indique encore
+un surapprentissage marqué.
 
 \begin{figure}[H]
   \centering
@@ -257,12 +248,10 @@ de surapprentissage.
   \caption{Courbes d'entraînement d'AlexNet sur ImageNet complet.}
 \end{figure}
 
-On peut également observer qu'au début de l'entraînement, la loss de validation
-peut être légèrement inférieure à celle du train. Cela n'est pas nécessairement
-anormal. Pendant l'entraînement, le Dropout est actif et les images sont soumises
-à des augmentations aléatoires, ce qui rend la tâche plus difficile pour le modèle.
-En validation, le Dropout est désactivé et les images suivent un prétraitement
-déterministe. Le modèle peut donc obtenir temporairement de meilleures performances
-sur la validation que sur les données d'entraînement.
+Au début, la loss de validation peut être un peu plus basse que celle du train.
+Ce n'est pas forcément anormal : pendant l'entraînement, le Dropout est actif
+et les images sont augmentées, ce qui complique la tâche. En validation, le
+Dropout est coupé et le prétraitement est fixe. Le modèle peut donc, un temps,
+mieux réussir la validation que le train.
 
 \end{document}

@@ -139,7 +139,7 @@ Y  : (N, 2\)
 
 **Pourquoi utilisons-nous la règle de la chaîne (chain rule) pour calculer les gradients dans les réseaux de neurones profonds ?**
 
-\-\> La règle de la chaîne permet de calculer le gradient d’une fonction composée de plusieurs couches en combinant les gradients locaux de chaque opération. Elle permet ainsi de propager l’erreur depuis la sortie du réseau jusqu’aux couches précédentes afin de mettre à jour les poids.
+\-\> La règle de la chaîne permet de calculer le gradient d’une fonction composée de plusieurs couches en combinant les gradients locaux de chaque opération. Elle sert à propager l’erreur depuis la sortie du réseau jusqu’aux couches précédentes pour mettre à jour les poids.
 
 **Quelles sont les principales raisons d’utiliser des mini-batchs plutôt que d’optimiser sur un seul exemple à la fois ou sur l’ensemble total des données ?**
 
@@ -163,7 +163,7 @@ Y  : (N, 2\)
 
 \-\> batch\_size=32 signifie que les données sont traitées par groupes de 32 images avant chaque mise à jour des poids. Cela permet de mieux gérer l’utilisation de la mémoire tout en accélérant les calculs.
 
-shuffle=True mélange les données à chaque époque pendant l’entraînement afin d’éviter que le modèle apprenne un ordre particulier des exemples et ainsi améliorer sa généralisation. Pour le test, shuffle=False conserve l’ordre des données, ce qui facilite une évaluation reproductible.
+shuffle=True mélange les données à chaque époque pendant l’entraînement pour éviter que le modèle apprenne un ordre particulier des exemples, ce qui aide la généralisation. Pour le test, shuffle=False conserve l’ordre des données, ce qui facilite une évaluation reproductible.
 
 ## **4.b**
 
@@ -173,7 +173,7 @@ Les images CIFAR-10 ont une forme `(3, 32, 32)` correspondant aux 3 canaux RGB e
 
 **2\. Pourquoi ne faut-il pas ajouter de Softmax avant `nn.CrossEntropyLoss` ?**
 
-Dans PyTorch, `nn.CrossEntropyLoss` attend directement les **logits bruts** produits par la dernière couche du réseau. Elle applique elle-même les opérations nécessaires, notamment le calcul du log-softmax, de manière plus stable numériquement. Ajouter une fonction `Softmax` avant `CrossEntropyLoss` est donc inutile et peut dégrader la stabilité numérique et l'apprentissage. Il faut donc simplement retourner les logits de la dernière couche.
+Dans PyTorch, `nn.CrossEntropyLoss` attend directement les **logits bruts** produits par la dernière couche du réseau. Elle applique elle-même le log-softmax, de façon plus stable numériquement. Ajouter un Softmax avant `CrossEntropyLoss` est inutile et peut dégrader la stabilité et l'apprentissage. Il faut simplement retourner les logits de la dernière couche.
 
 ## **4.c**
 
@@ -189,7 +189,7 @@ La différence est que `optimizer.zero_grad()` efface les gradients du batch pr�
 
 **1\. Pourquoi utilise-t-on `with torch.no_grad():` lors de l'évaluation ?**
 
-Lors de l’évaluation, les poids du modèle ne sont pas modifiés, donc il n’est pas nécessaire de calculer les gradients. `torch.no_grad()` permet de désactiver ces calculs, ce qui réduit l’utilisation de la mémoire et le nombre de calculs nécessaires. L’évaluation est ainsi plus rapide et consomme moins de ressources.
+Lors de l’évaluation, les poids du modèle ne sont pas modifiés, donc il n’est pas nécessaire de calculer les gradients. `torch.no_grad()` désactive ces calculs, ce qui réduit la mémoire et le temps de calcul.
 
 **2\. Quelle accuracy attendre pour des prédictions aléatoires sur CIFAR-10 ?**
 
@@ -215,7 +215,7 @@ La courbe Loss/train\_step est plus bruitée car elle représente la loss calcul
 
 ## **5.e**
 
-On remarque que le run (bs=128, lr=0.1) se distingue clairement des deux autres. Sa Loss/train diminue progressivement, passant d’environ 1,8 à 1,4, tandis que sa Loss/val reste autour de 1,7. Cela montre que le modèle apprend de manière plus efficace et obtient de meilleurs résultats sur les données de validation. À l’inverse, pour les runs (bs=32, lr=0.001) et (bs=32, lr=0.01), la Loss/train reste proche de 2,0, avec une Loss/val autour de 2,1, ce qui indique un apprentissage moins efficace.
+Le run (bs=128, lr=0.1) se distingue des deux autres. Sa Loss/train diminue progressivement, passant d’environ 1,8 à 1,4, tandis que sa Loss/val reste autour de 1,7. Le modèle apprend mieux et généralise mieux. Pour les runs (bs=32, lr=0.001) et (bs=32, lr=0.01), la Loss/train reste proche de 2,0, avec une Loss/val autour de 2,1 : l’apprentissage est moins efficace.
 
 Pour la courbe Accuracy/val, le run (bs=128, lr=0.1) atteint également la meilleure précision, avec environ 46 % à la dernière époque, contre environ 35 à 36 % pour les deux autres runs.
 

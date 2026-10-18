@@ -75,7 +75,7 @@ Donc L1 favorise la sparsité, tandis que L2 réduit progressivement l'amplitude
 
 **2\. Quel optimiseur converge le plus rapidement initialement ?**
 
-Avec cette configuration, Adam converge généralement assez rapidement au début de l’entraînement. RMSprop peut également converger rapidement. L’ordre peut cependant varier selon l’exécution, notamment à cause de l’initialisation aléatoire du réseau et de l’ordre des mini-batchs. Il faut donc surtout se baser sur les courbes obtenues dans TensorBoard pour comparer les différents optimiseurs.
+Avec cette configuration, Adam converge assez vite au début. RMSprop aussi parfois. L’ordre peut changer d’une exécution à l’autre, selon l’initialisation et l’ordre des mini-batchs. Il faut surtout se baser sur les courbes TensorBoard pour comparer les optimiseurs.
 
 **3\. SGD vs Momentum**
 
