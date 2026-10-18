@@ -29,3 +29,5 @@ TP4/   # RNN/LSTM, partitions ABC, génération
 
 - **TP1 / TP2** : terminés
 - **TP3 / TP4** : en cours (rapports théoriques + scripts ; captures TensorBoard / logs cluster à finaliser)
+
+> Mise à jour : finalisation TP3 et TP4 en priorité.
