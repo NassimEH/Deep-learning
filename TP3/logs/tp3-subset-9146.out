@@ -1,0 +1,90 @@
+Job 9146 on starfighter-slurm-node-01-1
+Sun Oct 18 17:08:06 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.84                 Driver Version: 595.84         CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L4                      Off |   00000000:06:10.0 Off |                    0 |
+| N/A   34C    P8             16W /   72W |       0MiB /  23034MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Device : cuda
+MLP paramètres          : 39,897,320
+AlexNet paramètres      : 61,100,840
+AlexNetDeep paramètres  : 62,871,080
+===== MLP subset 20k / 10 epochs =====
+Device : cuda
+MLP paramètres          : 39,897,320
+AlexNet paramètres      : 61,100,840
+AlexNetDeep paramètres  : 62,871,080
+Chargement d'ImageNet...
+Modèle mlp initialisé avec 39,897,320 paramètres.
+Epoch [1/10] | Train Loss: 7.1812 (Acc: 0.0014) | Val Loss: 6.9806 (Acc: 0.0014) | Time: 21.3s
+Epoch [2/10] | Train Loss: 6.9469 (Acc: 0.0019) | Val Loss: 6.9559 (Acc: 0.0024) | Time: 22.2s
+Epoch [3/10] | Train Loss: 6.9282 (Acc: 0.0021) | Val Loss: 6.9372 (Acc: 0.0028) | Time: 17.0s
+Epoch [4/10] | Train Loss: 6.9088 (Acc: 0.0025) | Val Loss: 6.9332 (Acc: 0.0012) | Time: 17.0s
+Epoch [5/10] | Train Loss: 6.8914 (Acc: 0.0040) | Val Loss: 6.9173 (Acc: 0.0036) | Time: 17.4s
+Epoch [6/10] | Train Loss: 6.8580 (Acc: 0.0051) | Val Loss: 6.9113 (Acc: 0.0042) | Time: 17.2s
+Epoch [7/10] | Train Loss: 6.8380 (Acc: 0.0043) | Val Loss: 6.9031 (Acc: 0.0042) | Time: 16.9s
+Epoch [8/10] | Train Loss: 6.8077 (Acc: 0.0058) | Val Loss: 6.8960 (Acc: 0.0048) | Time: 17.4s
+Epoch [9/10] | Train Loss: 6.7719 (Acc: 0.0066) | Val Loss: 6.8796 (Acc: 0.0056) | Time: 17.0s
+Epoch [10/10] | Train Loss: 6.7585 (Acc: 0.0062) | Val Loss: 6.8532 (Acc: 0.0048) | Time: 17.1s
+Durée moyenne d'une époque : 18.1s (0.30 min)
+Estimation pour 100 époques : 0.50 h
+===== AlexNet subset 20k / 10 epochs =====
+Device : cuda
+MLP paramètres          : 39,897,320
+AlexNet paramètres      : 61,100,840
+AlexNetDeep paramètres  : 62,871,080
+Chargement d'ImageNet...
+Modèle alexnet initialisé avec 61,100,840 paramètres.
+Epoch [1/10] | Train Loss: 6.9066 (Acc: 0.0008) | Val Loss: 6.9001 (Acc: 0.0020) | Time: 19.6s
+Epoch [2/10] | Train Loss: 6.8714 (Acc: 0.0015) | Val Loss: 6.8468 (Acc: 0.0022) | Time: 17.9s
+Epoch [3/10] | Train Loss: 6.8064 (Acc: 0.0022) | Val Loss: 6.8131 (Acc: 0.0028) | Time: 18.3s
+Epoch [4/10] | Train Loss: 6.7579 (Acc: 0.0030) | Val Loss: 6.7734 (Acc: 0.0030) | Time: 18.1s
+Epoch [5/10] | Train Loss: 6.6984 (Acc: 0.0037) | Val Loss: 6.7000 (Acc: 0.0042) | Time: 18.2s
+Epoch [6/10] | Train Loss: 6.6227 (Acc: 0.0039) | Val Loss: 6.6387 (Acc: 0.0044) | Time: 18.1s
+Epoch [7/10] | Train Loss: 6.5468 (Acc: 0.0056) | Val Loss: 6.6149 (Acc: 0.0064) | Time: 18.4s
+Epoch [8/10] | Train Loss: 6.4807 (Acc: 0.0075) | Val Loss: 6.5383 (Acc: 0.0066) | Time: 18.2s
+Epoch [9/10] | Train Loss: 6.4046 (Acc: 0.0092) | Val Loss: 6.4730 (Acc: 0.0084) | Time: 18.1s
+Epoch [10/10] | Train Loss: 6.3326 (Acc: 0.0097) | Val Loss: 6.4408 (Acc: 0.0104) | Time: 18.3s
+Durée moyenne d'une époque : 18.3s (0.31 min)
+Estimation pour 100 époques : 0.51 h
+===== AlexNetDeep subset 20k / 10 epochs =====
+Device : cuda
+MLP paramètres          : 39,897,320
+AlexNet paramètres      : 61,100,840
+AlexNetDeep paramètres  : 62,871,080
+Chargement d'ImageNet...
+Modèle alexnet_deep initialisé avec 62,871,080 paramètres.
+Epoch [1/10] | Train Loss: 6.9081 (Acc: 0.0009) | Val Loss: 6.9076 (Acc: 0.0006) | Time: 19.0s
+Epoch [2/10] | Train Loss: 6.8982 (Acc: 0.0012) | Val Loss: 6.8989 (Acc: 0.0024) | Time: 18.6s
+Epoch [3/10] | Train Loss: 6.8491 (Acc: 0.0019) | Val Loss: 6.8505 (Acc: 0.0020) | Time: 18.5s
+Epoch [4/10] | Train Loss: 6.7868 (Acc: 0.0027) | Val Loss: 6.8128 (Acc: 0.0036) | Time: 18.9s
+Epoch [5/10] | Train Loss: 6.7538 (Acc: 0.0020) | Val Loss: 6.7840 (Acc: 0.0032) | Time: 18.3s
+Epoch [6/10] | Train Loss: 6.7232 (Acc: 0.0032) | Val Loss: 6.7642 (Acc: 0.0034) | Time: 18.5s
+Epoch [7/10] | Train Loss: 6.6713 (Acc: 0.0032) | Val Loss: 6.7140 (Acc: 0.0034) | Time: 18.1s
+Epoch [8/10] | Train Loss: 6.6305 (Acc: 0.0036) | Val Loss: 6.6895 (Acc: 0.0048) | Time: 18.4s
+Epoch [9/10] | Train Loss: 6.5906 (Acc: 0.0055) | Val Loss: 6.6786 (Acc: 0.0032) | Time: 18.8s
+Epoch [10/10] | Train Loss: 6.5414 (Acc: 0.0055) | Val Loss: 6.6188 (Acc: 0.0050) | Time: 18.8s
+Durée moyenne d'une époque : 18.6s (0.31 min)
+Estimation pour 100 époques : 0.52 h
+===== SUBSET DONE =====
+total 24
+drwxr-xr-x+ 6 nelhaddad 2243 4096 Oct 18 16:39 .
+drwxr-xr-x+ 6 nelhaddad 2243 4096 Oct 18 16:49 ..
+drwxr-xr-x+ 2 nelhaddad 2243 4096 Oct 18 17:16 alexnet_deep_sub20000_lr0.0001
+drwxr-xr-x+ 2 nelhaddad 2243 4096 Oct 18 17:12 alexnet_sub20000_lr0.0001
+drwxr-xr-x+ 2 nelhaddad 2243 4096 Oct 18 17:08 alexnet_subfull_lr0.0001
+drwxr-xr-x+ 2 nelhaddad 2243 4096 Oct 18 17:08 mlp_sub20000_lr0.0001

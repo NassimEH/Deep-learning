@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from torchvision.datasets import ImageNet
-from tqdm import tqdm
 
 data_dir = "/mnt/ssd/imagenet/2012"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -175,7 +174,7 @@ def count_parameters(model):
 def evaluate(loader, model, criterion):
     model.eval()  # Désactive le Dropout !
     running_loss, correct, total = 0.0, 0, 0
-    for images, labels in tqdm(loader, desc="Eval", leave=False):
+    for images, labels in loader:
         images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
         outputs = model(images)
         loss = criterion(outputs, labels)
@@ -224,7 +223,7 @@ def train_model(
         running_loss, correct_train, total_train = 0.0, 0, 0
         t0 = time.perf_counter()
 
-        for images, labels in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+        for images, labels in train_loader:
             images, labels = images.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True
             )
