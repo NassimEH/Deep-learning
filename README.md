@@ -2,7 +2,8 @@
 
 Travaux pratiques du cours [CSC 8607 – Introduction au deep learning](https://www-inf.telecom-sudparis.eu/COURS/CSC8607/Supports/) (Télécom SudParis).
 
-**Auteur :** Nassim El Haddad
+**Auteur :** Nassim El Haddad  
+**Dépôt :** [github.com/NassimEH/Deep-learning](https://github.com/NassimEH/Deep-learning)
 
 ## Consignes des TP
 
