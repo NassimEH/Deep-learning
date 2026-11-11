@@ -36,7 +36,6 @@ val_transform = transforms.Compose(
 
 
 def get_dataloaders(batch_size=256, n_workers=8, subset_size=None):
-    print("Chargement d'ImageNet...")
     train_dataset = ImageNet(root=data_dir, split="train", transform=train_transform)
     val_dataset = ImageNet(root=data_dir, split="val", transform=val_transform)
 
