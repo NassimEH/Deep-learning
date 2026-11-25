@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --partition=gpu
+#SBATCH --qos=normal
+#SBATCH --gres=gpu:nvidia_h100_nvl:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=14G
+#SBATCH --time=00:25:00
+#SBATCH --account=csc_8607
+#SBATCH -J tp6-ex1
+#SBATCH -o logs/%x-%j.out
+#SBATCH --chdir=/mnt/hdd/homes/nelhaddad/TP6
+
+set -euo pipefail
+mkdir -p logs
+source tp6_env.sh
+python -u bench.py --tag ref-synth
+python -u bench.py --tag ref-async --async-demo
+python -u bench.py --tag ref-maxbatch --find-max-batch
+python -u bench.py --tag ref-raw --data raw --workers 3 --epoch
